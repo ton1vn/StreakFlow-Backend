@@ -8,6 +8,6 @@ public class TestController {
 
     @GetMapping("/test")
     public String test() {
-        return "StreakFlow läuft!";
+        return "Streakflow läuft!";
     }
 }
