@@ -16,4 +16,13 @@ public class ExerciseController {
                 new Exercise(3L, "Yoga", "Mobility", 20)
         );
     }
+
+    @GetMapping("/executions")
+    public List<ExerciseExecution> getExecutions() {
+        return List.of(
+                new ExerciseExecution(1L, "2026-04-20", 30, 1L),
+                new ExerciseExecution(2L, "2026-04-19", 45, 2L),
+                new ExerciseExecution(3L, "2026-04-18", 20, 3L)
+        );
+    }
 }
