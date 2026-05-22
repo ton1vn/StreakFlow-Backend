@@ -27,4 +27,17 @@ public class ExerciseController {
                 new ExerciseExecution(3L, "2026-04-18", 20, 3L)
         );
     }
+    @GetMapping("/progress")
+    public UserProgress getProgress() {
+        return new UserProgress(
+                7,
+                14,
+                860,
+                4,
+                120,
+                2,
+                2,
+                3
+        );
+    }
 }
