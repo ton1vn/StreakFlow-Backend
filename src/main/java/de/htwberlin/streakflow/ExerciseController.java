@@ -63,6 +63,10 @@ public class ExerciseController {
     @PostMapping("/executions")
     @ResponseStatus(HttpStatus.CREATED)
     public ExerciseExecution completeExercise(@RequestBody CompleteExerciseRequest request) {
+        if (request.exerciseId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Exercise id is required");
+        }
+
         Exercise exercise = exerciseRepository.findById(request.exerciseId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exercise not found"));
 
@@ -94,6 +98,8 @@ public class ExerciseController {
 
     @GetMapping("/progress")
     public UserProgress getProgress() {
+        seedDefaultExercisesIfNeeded();
+
         List<ExerciseExecution> executions = executionRepository.findAll();
         LocalDate today = LocalDate.now();
         List<ExerciseExecution> todayExecutions = executions.stream()
@@ -104,7 +110,7 @@ public class ExerciseController {
         int coins = executions.stream().mapToInt(ExerciseExecution::getEarnedCoins).sum();
         int minutesToday = todayExecutions.stream().mapToInt(ExerciseExecution::getDuration).sum();
         int xpToday = todayExecutions.stream().mapToInt(ExerciseExecution::getEarnedXp).sum();
-        int dailyGoal = Math.max(DEFAULT_DAILY_GOAL, Math.min(DEFAULT_DAILY_GOAL, (int) exerciseRepository.count()));
+        int dailyGoal = Math.max(1, Math.min(DEFAULT_DAILY_GOAL, (int) exerciseRepository.count()));
         int currentStreak = calculateCurrentStreak(executions);
         int longestStreak = calculateLongestStreak(executions);
 
