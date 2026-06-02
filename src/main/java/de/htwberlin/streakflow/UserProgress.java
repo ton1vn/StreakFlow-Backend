@@ -10,8 +10,10 @@ public class UserProgress {
     private int streakFreezers;
     private int completedToday;
     private int dailyGoal;
+    private int minutesToday;
+    private int xpToday;
 
-    public UserProgress(int currentStreak, int longestStreak, int xp, int level, int coins, int streakFreezers, int completedToday, int dailyGoal) {
+    public UserProgress(int currentStreak, int longestStreak, int xp, int level, int coins, int streakFreezers, int completedToday, int dailyGoal, int minutesToday, int xpToday) {
         this.currentStreak = currentStreak;
         this.longestStreak = longestStreak;
         this.xp = xp;
@@ -20,6 +22,8 @@ public class UserProgress {
         this.streakFreezers = streakFreezers;
         this.completedToday = completedToday;
         this.dailyGoal = dailyGoal;
+        this.minutesToday = minutesToday;
+        this.xpToday = xpToday;
     }
 
     public int getCurrentStreak() {
@@ -52,5 +56,13 @@ public class UserProgress {
 
     public int getDailyGoal() {
         return dailyGoal;
+    }
+
+    public int getMinutesToday() {
+        return minutesToday;
+    }
+
+    public int getXpToday() {
+        return xpToday;
     }
 }
