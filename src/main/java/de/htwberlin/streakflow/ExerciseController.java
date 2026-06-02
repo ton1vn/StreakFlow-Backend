@@ -1,7 +1,11 @@
 package de.htwberlin.streakflow;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -10,13 +14,22 @@ import java.util.List;
 @RestController
 public class ExerciseController {
 
+    private final ExerciseRepository exerciseRepository;
+
+    public ExerciseController(ExerciseRepository exerciseRepository) {
+        this.exerciseRepository = exerciseRepository;
+    }
+
     @GetMapping("/exercises")
     public List<Exercise> getExercises() {
-        return List.of(
-                new Exercise(1L, "Joggen", "Cardio", 30),
-                new Exercise(2L, "Krafttraining", "Strength", 45),
-                new Exercise(3L, "Yoga", "Mobility", 20)
-        );
+        return exerciseRepository.findAll();
+    }
+
+    @PostMapping("/exercises")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Exercise createExercise(@RequestBody Exercise exercise) {
+        exercise.setId(null);
+        return exerciseRepository.save(exercise);
     }
 
     @GetMapping("/executions")
@@ -27,6 +40,7 @@ public class ExerciseController {
                 new ExerciseExecution(3L, "2026-04-18", 20, 3L)
         );
     }
+
     @GetMapping("/progress")
     public UserProgress getProgress() {
         return new UserProgress(
