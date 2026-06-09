@@ -24,8 +24,8 @@ public class ExerciseController {
     private static final int DEFAULT_DAILY_GOAL = 3;
     private static final String XP_BOOST_ID = "xp-boost";
     private static final String STREAK_FREEZE_ID = "streak-freeze";
-    private static final int XP_BOOST_COST = 10;
-    private static final int STREAK_FREEZE_COST = 25;
+    private static final int XP_BOOST_COST = 30;
+    private static final int STREAK_FREEZE_COST = 50;
     private static final int BASE_STREAK_FREEZERS = 2;
 
     private final ExerciseRepository exerciseRepository;
