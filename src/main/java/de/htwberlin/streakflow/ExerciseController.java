@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -21,13 +22,20 @@ public class ExerciseController {
     private static final int XP_PER_MINUTE = 10;
     private static final int MINUTES_PER_COIN = 10;
     private static final int DEFAULT_DAILY_GOAL = 3;
+    private static final String XP_BOOST_ID = "xp-boost";
+    private static final String STREAK_FREEZE_ID = "streak-freeze";
+    private static final int XP_BOOST_COST = 10;
+    private static final int STREAK_FREEZE_COST = 25;
+    private static final int BASE_STREAK_FREEZERS = 2;
 
     private final ExerciseRepository exerciseRepository;
     private final ExerciseExecutionRepository executionRepository;
+    private final ShopPurchaseRepository shopPurchaseRepository;
 
-    public ExerciseController(ExerciseRepository exerciseRepository, ExerciseExecutionRepository executionRepository) {
+    public ExerciseController(ExerciseRepository exerciseRepository, ExerciseExecutionRepository executionRepository, ShopPurchaseRepository shopPurchaseRepository) {
         this.exerciseRepository = exerciseRepository;
         this.executionRepository = executionRepository;
+        this.shopPurchaseRepository = shopPurchaseRepository;
     }
 
     @GetMapping("/exercises")
@@ -80,7 +88,15 @@ public class ExerciseController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duration must be positive");
         }
 
+        ShopPurchase activeBoost = shopPurchaseRepository
+                .findFirstByItemIdAndUsedAtIsNullOrderByPurchasedAtAsc(XP_BOOST_ID)
+                .orElse(null);
         int earnedXp = duration * XP_PER_MINUTE;
+        if (activeBoost != null) {
+            earnedXp *= 2;
+            activeBoost.setUsedAt(LocalDateTime.now());
+            shopPurchaseRepository.save(activeBoost);
+        }
         int earnedCoins = Math.max(1, duration / MINUTES_PER_COIN);
 
         ExerciseExecution execution = new ExerciseExecution(
@@ -96,6 +112,43 @@ public class ExerciseController {
         return executionRepository.save(execution);
     }
 
+    @GetMapping("/shop/items")
+    public List<ShopItem> getShopItems() {
+        return List.of(
+                new ShopItem(XP_BOOST_ID, "XP Boost", XP_BOOST_COST, "Verdoppelt die XP deiner nächsten bestätigten Übung."),
+                new ShopItem(STREAK_FREEZE_ID, "StreakFreeze", STREAK_FREEZE_COST, "Schützt deine Streak, wenn du einen Tag verpasst.")
+        );
+    }
+
+    @GetMapping("/shop/purchases")
+    public List<ShopPurchase> getShopPurchases() {
+        return shopPurchaseRepository.findAll();
+    }
+
+    @PostMapping("/shop/purchases")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ShopPurchase buyShopItem(@RequestBody ShopPurchaseRequest request) {
+        ShopItem item = getShopItems().stream()
+                .filter(shopItem -> shopItem.id().equals(request.itemId()))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Shop item not found"));
+
+        if (availableCoins() < item.cost()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Not enough coins");
+        }
+
+        ShopPurchase purchase = new ShopPurchase(
+                null,
+                item.id(),
+                item.name(),
+                item.cost(),
+                LocalDateTime.now(),
+                null
+        );
+
+        return shopPurchaseRepository.save(purchase);
+    }
+
     @GetMapping("/progress")
     public UserProgress getProgress() {
         seedDefaultExercisesIfNeeded();
@@ -107,12 +160,14 @@ public class ExerciseController {
                 .toList();
 
         int xp = executions.stream().mapToInt(ExerciseExecution::getEarnedXp).sum();
-        int coins = executions.stream().mapToInt(ExerciseExecution::getEarnedCoins).sum();
+        int coins = availableCoins();
         int minutesToday = todayExecutions.stream().mapToInt(ExerciseExecution::getDuration).sum();
         int xpToday = todayExecutions.stream().mapToInt(ExerciseExecution::getEarnedXp).sum();
         int dailyGoal = Math.max(1, Math.min(DEFAULT_DAILY_GOAL, (int) exerciseRepository.count()));
         int currentStreak = calculateCurrentStreak(executions);
         int longestStreak = calculateLongestStreak(executions);
+        int streakFreezers = BASE_STREAK_FREEZERS + shopPurchaseRepository.findByItemId(STREAK_FREEZE_ID).size();
+        int activeXpBoosts = activeXpBoostCount();
 
         return new UserProgress(
                 currentStreak,
@@ -120,12 +175,29 @@ public class ExerciseController {
                 xp,
                 xp / 1000 + 1,
                 coins,
-                2,
+                streakFreezers,
                 todayExecutions.size(),
                 dailyGoal,
                 minutesToday,
-                xpToday
+                xpToday,
+                activeXpBoosts
         );
+    }
+
+    private int availableCoins() {
+        int earnedCoins = executionRepository.findAll().stream()
+                .mapToInt(ExerciseExecution::getEarnedCoins)
+                .sum();
+        int spentCoins = shopPurchaseRepository.findAll().stream()
+                .mapToInt(ShopPurchase::getCost)
+                .sum();
+        return earnedCoins - spentCoins;
+    }
+
+    private int activeXpBoostCount() {
+        return (int) shopPurchaseRepository.findByItemId(XP_BOOST_ID).stream()
+                .filter(purchase -> purchase.getUsedAt() == null)
+                .count();
     }
 
     private int calculateCurrentStreak(List<ExerciseExecution> executions) {
@@ -182,5 +254,11 @@ public class ExerciseController {
     }
 
     public record CompleteExerciseRequest(Long exerciseId, Integer duration) {
+    }
+
+    public record ShopItem(String id, String name, int cost, String description) {
+    }
+
+    public record ShopPurchaseRequest(String itemId) {
     }
 }
