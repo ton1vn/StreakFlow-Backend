@@ -2,12 +2,15 @@ package de.htwberlin.streakflow;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -61,6 +64,18 @@ public class ExerciseController {
 
         exercise.setId(null);
         return exerciseRepository.save(exercise);
+    }
+
+    @DeleteMapping("/exercises/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Transactional
+    public void deleteExercise(@PathVariable Long id) {
+        if (!exerciseRepository.existsById(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exercise not found");
+        }
+
+        executionRepository.deleteByExerciseId(id);
+        exerciseRepository.deleteById(id);
     }
 
     @GetMapping("/executions")

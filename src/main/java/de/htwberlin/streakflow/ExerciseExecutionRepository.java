@@ -9,4 +9,6 @@ public interface ExerciseExecutionRepository extends JpaRepository<ExerciseExecu
     List<ExerciseExecution> findByDate(LocalDate date);
 
     boolean existsByExerciseIdAndDate(Long exerciseId, LocalDate date);
+
+    void deleteByExerciseId(Long exerciseId);
 }
