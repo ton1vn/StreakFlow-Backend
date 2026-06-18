@@ -166,6 +166,12 @@ public class ExerciseController {
         return shopPurchaseRepository.save(purchase);
     }
 
+    @PostMapping("/shop/freezer")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ShopPurchase buyStreakFreezer() {
+        return buyShopItem(new ShopPurchaseRequest(STREAK_FREEZE_ID));
+    }
+
     @PostMapping("/shop/purchases/{id}/use")
     public ShopPurchase useShopPurchase(@PathVariable Long id) {
         ShopPurchase purchase = shopPurchaseRepository.findById(id)
