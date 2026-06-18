@@ -49,17 +49,22 @@ public class DataSourceConfig {
         String[] userInfo = uri.getUserInfo() == null ? new String[]{"", ""} : uri.getUserInfo().split(":", 2);
         String username = userInfo.length > 0 ? userInfo[0] : "";
         String password = userInfo.length > 1 ? userInfo[1] : "";
-        String jdbcUrl = "jdbc:postgresql://" + uri.getHost() + ":" + uri.getPort() + uri.getPath();
+        String jdbcUrl = toJdbcPostgresUrl(uri);
 
         return buildDataSource(jdbcUrl, username, password);
     }
 
     private String normalizePostgresUrl(String url) {
         if (url.startsWith("postgres://") || url.startsWith("postgresql://")) {
-            URI uri = URI.create(url);
-            return "jdbc:postgresql://" + uri.getHost() + ":" + uri.getPort() + uri.getPath();
+            return toJdbcPostgresUrl(URI.create(url));
         }
 
         return url;
+    }
+
+    private String toJdbcPostgresUrl(URI uri) {
+        String port = uri.getPort() == -1 ? "" : ":" + uri.getPort();
+        String query = uri.getQuery() == null ? "" : "?" + uri.getQuery();
+        return "jdbc:postgresql://" + uri.getHost() + port + uri.getPath() + query;
     }
 }
