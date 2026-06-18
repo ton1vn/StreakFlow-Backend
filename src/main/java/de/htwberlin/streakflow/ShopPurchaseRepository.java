@@ -9,4 +9,6 @@ public interface ShopPurchaseRepository extends JpaRepository<ShopPurchase, Long
     List<ShopPurchase> findByItemId(String itemId);
 
     Optional<ShopPurchase> findFirstByItemIdAndUsedAtIsNullOrderByPurchasedAtAsc(String itemId);
+
+    List<ShopPurchase> findByItemIdAndUsedAtIsNull(String itemId);
 }

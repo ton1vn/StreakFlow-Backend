@@ -29,7 +29,7 @@ public class ExerciseController {
     private static final String STREAK_FREEZE_ID = "streak-freeze";
     private static final int XP_BOOST_COST = 30;
     private static final int STREAK_FREEZE_COST = 50;
-    private static final int BASE_STREAK_FREEZERS = 2;
+    private static final int BASE_STREAK_FREEZERS = 0;
 
     private final ExerciseRepository exerciseRepository;
     private final ExerciseExecutionRepository executionRepository;
@@ -104,13 +104,14 @@ public class ExerciseController {
         }
 
         ShopPurchase activeBoost = shopPurchaseRepository
-                .findFirstByItemIdAndUsedAtIsNullOrderByPurchasedAtAsc(XP_BOOST_ID)
+                .findByItemId(XP_BOOST_ID)
+                .stream()
+                .filter(this::isActiveBoost)
+                .findFirst()
                 .orElse(null);
         int earnedXp = duration * XP_PER_MINUTE;
         if (activeBoost != null) {
             earnedXp *= 2;
-            activeBoost.setUsedAt(LocalDateTime.now());
-            shopPurchaseRepository.save(activeBoost);
         }
         int earnedCoins = Math.max(1, duration / MINUTES_PER_COIN);
 
@@ -130,7 +131,7 @@ public class ExerciseController {
     @GetMapping("/shop/items")
     public List<ShopItem> getShopItems() {
         return List.of(
-                new ShopItem(XP_BOOST_ID, "XP Boost", XP_BOOST_COST, "Verdoppelt die XP deiner nächsten bestätigten Übung."),
+                new ShopItem(XP_BOOST_ID, "XP Boost", XP_BOOST_COST, "Verdoppelt 24 Stunden lang die XP aller bestätigten Übungen."),
                 new ShopItem(STREAK_FREEZE_ID, "StreakFreeze", STREAK_FREEZE_COST, "Schützt deine Streak, wenn du einen Tag verpasst.")
         );
     }
@@ -158,9 +159,29 @@ public class ExerciseController {
                 item.name(),
                 item.cost(),
                 LocalDateTime.now(),
+                null,
                 null
         );
 
+        return shopPurchaseRepository.save(purchase);
+    }
+
+    @PostMapping("/shop/purchases/{id}/use")
+    public ShopPurchase useShopPurchase(@PathVariable Long id) {
+        ShopPurchase purchase = shopPurchaseRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Purchase not found"));
+
+        if (!XP_BOOST_ID.equals(purchase.getItemId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only XP Boosts can be activated manually");
+        }
+
+        if (purchase.getUsedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "XP Boost was already activated");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        purchase.setUsedAt(now);
+        purchase.setExpiresAt(now.plusHours(24));
         return shopPurchaseRepository.save(purchase);
     }
 
@@ -181,8 +202,10 @@ public class ExerciseController {
         int dailyGoal = Math.max(1, Math.min(DEFAULT_DAILY_GOAL, (int) exerciseRepository.count()));
         int currentStreak = calculateCurrentStreak(executions);
         int longestStreak = calculateLongestStreak(executions);
-        int streakFreezers = BASE_STREAK_FREEZERS + shopPurchaseRepository.findByItemId(STREAK_FREEZE_ID).size();
+        int streakFreezers = BASE_STREAK_FREEZERS + availableStreakFreezerCount();
         int activeXpBoosts = activeXpBoostCount();
+        int availableXpBoosts = availableXpBoostCount();
+        String activeXpBoostExpiresAt = activeXpBoostExpiresAt();
 
         return new UserProgress(
                 currentStreak,
@@ -195,7 +218,9 @@ public class ExerciseController {
                 dailyGoal,
                 minutesToday,
                 xpToday,
-                activeXpBoosts
+                activeXpBoosts,
+                availableXpBoosts,
+                activeXpBoostExpiresAt
         );
     }
 
@@ -210,22 +235,76 @@ public class ExerciseController {
     }
 
     private int activeXpBoostCount() {
-        return (int) shopPurchaseRepository.findByItemId(XP_BOOST_ID).stream()
-                .filter(purchase -> purchase.getUsedAt() == null)
+        return (int) shopPurchaseRepository.findByItemId(XP_BOOST_ID)
+                .stream()
+                .filter(this::isActiveBoost)
                 .count();
+    }
+
+    private int availableXpBoostCount() {
+        return shopPurchaseRepository.findByItemIdAndUsedAtIsNull(XP_BOOST_ID).size();
+    }
+
+    private String activeXpBoostExpiresAt() {
+        return shopPurchaseRepository.findByItemId(XP_BOOST_ID)
+                .stream()
+                .filter(this::isActiveBoost)
+                .map(ShopPurchase::getExpiresAt)
+                .sorted()
+                .findFirst()
+                .map(LocalDateTime::toString)
+                .orElse(null);
+    }
+
+    private boolean isActiveBoost(ShopPurchase purchase) {
+        return XP_BOOST_ID.equals(purchase.getItemId())
+                && purchase.getUsedAt() != null
+                && purchase.getExpiresAt() != null
+                && purchase.getExpiresAt().isAfter(LocalDateTime.now());
+    }
+
+    private int availableStreakFreezerCount() {
+        return shopPurchaseRepository.findByItemIdAndUsedAtIsNull(STREAK_FREEZE_ID).size();
     }
 
     private int calculateCurrentStreak(List<ExerciseExecution> executions) {
         Set<LocalDate> completedDates = completedDates(executions);
-        LocalDate cursor = LocalDate.now();
+        LocalDate today = LocalDate.now();
+        LocalDate cursor = completedDates.contains(today) ? today : today.minusDays(1);
         int streak = 0;
+        int availableFreezers = availableStreakFreezerCount();
 
-        while (completedDates.contains(cursor)) {
-            streak++;
+        while (!cursor.isBefore(oldestCompletedDate(completedDates))) {
+            if (completedDates.contains(cursor)) {
+                streak++;
+                cursor = cursor.minusDays(1);
+                continue;
+            }
+
+            if (availableFreezers <= 0) {
+                return 0;
+            }
+
+            consumeStreakFreeze();
+            availableFreezers--;
             cursor = cursor.minusDays(1);
         }
 
         return streak;
+    }
+
+    private LocalDate oldestCompletedDate(Set<LocalDate> completedDates) {
+        return completedDates.stream()
+                .min(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+    }
+
+    private void consumeStreakFreeze() {
+        ShopPurchase freeze = shopPurchaseRepository
+                .findFirstByItemIdAndUsedAtIsNullOrderByPurchasedAtAsc(STREAK_FREEZE_ID)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "No streak freezer available"));
+        freeze.setUsedAt(LocalDateTime.now());
+        shopPurchaseRepository.save(freeze);
     }
 
     private int calculateLongestStreak(List<ExerciseExecution> executions) {

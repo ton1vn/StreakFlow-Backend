@@ -13,8 +13,10 @@ public class UserProgress {
     private int minutesToday;
     private int xpToday;
     private int activeXpBoosts;
+    private int availableXpBoosts;
+    private String activeXpBoostExpiresAt;
 
-    public UserProgress(int currentStreak, int longestStreak, int xp, int level, int coins, int streakFreezers, int completedToday, int dailyGoal, int minutesToday, int xpToday, int activeXpBoosts) {
+    public UserProgress(int currentStreak, int longestStreak, int xp, int level, int coins, int streakFreezers, int completedToday, int dailyGoal, int minutesToday, int xpToday, int activeXpBoosts, int availableXpBoosts, String activeXpBoostExpiresAt) {
         this.currentStreak = currentStreak;
         this.longestStreak = longestStreak;
         this.xp = xp;
@@ -26,6 +28,8 @@ public class UserProgress {
         this.minutesToday = minutesToday;
         this.xpToday = xpToday;
         this.activeXpBoosts = activeXpBoosts;
+        this.availableXpBoosts = availableXpBoosts;
+        this.activeXpBoostExpiresAt = activeXpBoostExpiresAt;
     }
 
     public int getCurrentStreak() {
@@ -70,5 +74,13 @@ public class UserProgress {
 
     public int getActiveXpBoosts() {
         return activeXpBoosts;
+    }
+
+    public int getAvailableXpBoosts() {
+        return availableXpBoosts;
+    }
+
+    public String getActiveXpBoostExpiresAt() {
+        return activeXpBoostExpiresAt;
     }
 }

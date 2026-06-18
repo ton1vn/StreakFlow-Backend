@@ -18,17 +18,19 @@ public class ShopPurchase {
     private int cost;
     private LocalDateTime purchasedAt;
     private LocalDateTime usedAt;
+    private LocalDateTime expiresAt;
 
     public ShopPurchase() {
     }
 
-    public ShopPurchase(Long id, String itemId, String itemName, int cost, LocalDateTime purchasedAt, LocalDateTime usedAt) {
+    public ShopPurchase(Long id, String itemId, String itemName, int cost, LocalDateTime purchasedAt, LocalDateTime usedAt, LocalDateTime expiresAt) {
         this.id = id;
         this.itemId = itemId;
         this.itemName = itemName;
         this.cost = cost;
         this.purchasedAt = purchasedAt;
         this.usedAt = usedAt;
+        this.expiresAt = expiresAt;
     }
 
     public Long getId() {
@@ -57,5 +59,13 @@ public class ShopPurchase {
 
     public void setUsedAt(LocalDateTime usedAt) {
         this.usedAt = usedAt;
+    }
+
+    public LocalDateTime getExpiresAt() {
+        return expiresAt;
+    }
+
+    public void setExpiresAt(LocalDateTime expiresAt) {
+        this.expiresAt = expiresAt;
     }
 }
