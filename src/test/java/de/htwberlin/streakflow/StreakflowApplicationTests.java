@@ -1,5 +1,13 @@
 package de.htwberlin.streakflow;
 
+import de.htwberlin.streakflow.controller.ExerciseController;
+import de.htwberlin.streakflow.model.Exercise;
+import de.htwberlin.streakflow.model.ExerciseExecution;
+import de.htwberlin.streakflow.model.UserProgress;
+import de.htwberlin.streakflow.repository.ExerciseExecutionRepository;
+import de.htwberlin.streakflow.repository.ExerciseRepository;
+import de.htwberlin.streakflow.repository.ShopPurchaseRepository;
+import de.htwberlin.streakflow.service.StreakFlowService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,9 +17,13 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -128,5 +140,29 @@ class StreakflowApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.coins").value(10))
                 .andExpect(jsonPath("$.streakFreezers").value(1));
+    }
+
+    @Test
+    void controllerReturnsExerciseFallbackWhenServiceFails() {
+        StreakFlowService service = mock(StreakFlowService.class);
+        Exercise fallbackExercise = new Exercise(1L, "Joggen", "Cardio", 30);
+        when(service.getExercises()).thenThrow(new RuntimeException("Database unavailable"));
+        when(service.fallbackExercises()).thenReturn(List.of(fallbackExercise));
+
+        ExerciseController controller = new ExerciseController(service);
+
+        assertEquals("Joggen", controller.getExercises().getFirst().getName());
+    }
+
+    @Test
+    void controllerReturnsProgressFallbackWhenServiceFails() {
+        StreakFlowService service = mock(StreakFlowService.class);
+        UserProgress fallbackProgress = new UserProgress(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, null);
+        when(service.getProgress()).thenThrow(new RuntimeException("Database unavailable"));
+        when(service.fallbackProgress()).thenReturn(fallbackProgress);
+
+        ExerciseController controller = new ExerciseController(service);
+
+        assertEquals(0, controller.getProgress().getXp());
     }
 }

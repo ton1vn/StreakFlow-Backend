@@ -1,5 +1,6 @@
-package de.htwberlin.streakflow;
+package de.htwberlin.streakflow.repository;
 
+import de.htwberlin.streakflow.model.ShopPurchase;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

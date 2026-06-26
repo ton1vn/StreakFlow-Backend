@@ -1,4 +1,4 @@
-package de.htwberlin.streakflow;
+package de.htwberlin.streakflow.model;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -35,10 +35,6 @@ public class ExerciseExecution {
 
     public Long getId() {
         return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
     }
 
     public LocalDate getDate() {

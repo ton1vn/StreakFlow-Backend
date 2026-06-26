@@ -1,4 +1,4 @@
-package de.htwberlin.streakflow;
+package de.htwberlin.streakflow.model;
 
 public class UserProgress {
 

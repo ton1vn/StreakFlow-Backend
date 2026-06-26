@@ -1,16 +1,19 @@
-package de.htwberlin.streakflow;
+package de.htwberlin.streakflow.service;
 
+import de.htwberlin.streakflow.dto.CompleteExerciseRequest;
+import de.htwberlin.streakflow.dto.ShopItem;
+import de.htwberlin.streakflow.dto.ShopPurchaseRequest;
+import de.htwberlin.streakflow.model.Exercise;
+import de.htwberlin.streakflow.model.ExerciseExecution;
+import de.htwberlin.streakflow.model.ShopPurchase;
+import de.htwberlin.streakflow.model.UserProgress;
+import de.htwberlin.streakflow.repository.ExerciseExecutionRepository;
+import de.htwberlin.streakflow.repository.ExerciseRepository;
+import de.htwberlin.streakflow.repository.ShopPurchaseRepository;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -18,9 +21,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-@CrossOrigin(origins = "*")
-@RestController
-public class ExerciseController {
+@Service
+public class StreakFlowService {
 
     private static final int XP_PER_MINUTE = 10;
     private static final int MINUTES_PER_COIN = 10;
@@ -35,21 +37,18 @@ public class ExerciseController {
     private final ExerciseExecutionRepository executionRepository;
     private final ShopPurchaseRepository shopPurchaseRepository;
 
-    public ExerciseController(ExerciseRepository exerciseRepository, ExerciseExecutionRepository executionRepository, ShopPurchaseRepository shopPurchaseRepository) {
+    public StreakFlowService(ExerciseRepository exerciseRepository, ExerciseExecutionRepository executionRepository, ShopPurchaseRepository shopPurchaseRepository) {
         this.exerciseRepository = exerciseRepository;
         this.executionRepository = executionRepository;
         this.shopPurchaseRepository = shopPurchaseRepository;
     }
 
-    @GetMapping("/exercises")
     public List<Exercise> getExercises() {
         seedDefaultExercisesIfNeeded();
         return exerciseRepository.findAll();
     }
 
-    @PostMapping("/exercises")
-    @ResponseStatus(HttpStatus.CREATED)
-    public Exercise createExercise(@RequestBody Exercise exercise) {
+    public Exercise createExercise(Exercise exercise) {
         if (exercise.getName() == null || exercise.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name is required");
         }
@@ -66,10 +65,8 @@ public class ExerciseController {
         return exerciseRepository.save(exercise);
     }
 
-    @DeleteMapping("/exercises/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
     @Transactional
-    public void deleteExercise(@PathVariable Long id) {
+    public void deleteExercise(Long id) {
         if (!exerciseRepository.existsById(id)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exercise not found");
         }
@@ -78,14 +75,11 @@ public class ExerciseController {
         exerciseRepository.deleteById(id);
     }
 
-    @GetMapping("/executions")
     public List<ExerciseExecution> getExecutions() {
         return executionRepository.findAll();
     }
 
-    @PostMapping("/executions")
-    @ResponseStatus(HttpStatus.CREATED)
-    public ExerciseExecution completeExercise(@RequestBody CompleteExerciseRequest request) {
+    public ExerciseExecution completeExercise(CompleteExerciseRequest request) {
         if (request.exerciseId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Exercise id is required");
         }
@@ -103,14 +97,8 @@ public class ExerciseController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duration must be positive");
         }
 
-        ShopPurchase activeBoost = shopPurchaseRepository
-                .findByItemId(XP_BOOST_ID)
-                .stream()
-                .filter(this::isActiveBoost)
-                .findFirst()
-                .orElse(null);
         int earnedXp = duration * XP_PER_MINUTE;
-        if (activeBoost != null) {
+        if (activeXpBoostCount() > 0) {
             earnedXp *= 2;
         }
         int earnedCoins = Math.max(1, duration / MINUTES_PER_COIN);
@@ -128,22 +116,15 @@ public class ExerciseController {
         return executionRepository.save(execution);
     }
 
-    @GetMapping("/shop/items")
     public List<ShopItem> getShopItems() {
-        return List.of(
-                new ShopItem(XP_BOOST_ID, "XP Boost", XP_BOOST_COST, "Verdoppelt 24 Stunden lang die XP aller bestätigten Übungen."),
-                new ShopItem(STREAK_FREEZE_ID, "StreakFreeze", STREAK_FREEZE_COST, "Schützt deine Streak, wenn du einen Tag verpasst.")
-        );
+        return fallbackShopItems();
     }
 
-    @GetMapping("/shop/purchases")
     public List<ShopPurchase> getShopPurchases() {
         return shopPurchaseRepository.findAll();
     }
 
-    @PostMapping("/shop/purchases")
-    @ResponseStatus(HttpStatus.CREATED)
-    public ShopPurchase buyShopItem(@RequestBody ShopPurchaseRequest request) {
+    public ShopPurchase buyShopItem(ShopPurchaseRequest request) {
         ShopItem item = getShopItems().stream()
                 .filter(shopItem -> shopItem.id().equals(request.itemId()))
                 .findFirst()
@@ -166,14 +147,11 @@ public class ExerciseController {
         return shopPurchaseRepository.save(purchase);
     }
 
-    @PostMapping("/shop/freezer")
-    @ResponseStatus(HttpStatus.CREATED)
     public ShopPurchase buyStreakFreezer() {
         return buyShopItem(new ShopPurchaseRequest(STREAK_FREEZE_ID));
     }
 
-    @PostMapping("/shop/purchases/{id}/use")
-    public ShopPurchase useShopPurchase(@PathVariable Long id) {
+    public ShopPurchase useShopPurchase(Long id) {
         ShopPurchase purchase = shopPurchaseRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Purchase not found"));
 
@@ -191,7 +169,6 @@ public class ExerciseController {
         return shopPurchaseRepository.save(purchase);
     }
 
-    @GetMapping("/progress")
     public UserProgress getProgress() {
         seedDefaultExercisesIfNeeded();
 
@@ -228,6 +205,25 @@ public class ExerciseController {
                 availableXpBoosts,
                 activeXpBoostExpiresAt
         );
+    }
+
+    public List<Exercise> fallbackExercises() {
+        return List.of(
+                new Exercise(1L, "Joggen", "Cardio", 30),
+                new Exercise(2L, "Krafttraining", "Strength", 45),
+                new Exercise(3L, "Yoga", "Mobility", 20)
+        );
+    }
+
+    public List<ShopItem> fallbackShopItems() {
+        return List.of(
+                new ShopItem(XP_BOOST_ID, "XP Boost", XP_BOOST_COST, "Verdoppelt 24 Stunden lang die XP aller bestätigten Übungen."),
+                new ShopItem(STREAK_FREEZE_ID, "StreakFreeze", STREAK_FREEZE_COST, "Schützt deine Streak, wenn du einen Tag verpasst.")
+        );
+    }
+
+    public UserProgress fallbackProgress() {
+        return new UserProgress(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, null);
     }
 
     private int availableCoins() {
@@ -346,19 +342,8 @@ public class ExerciseController {
             return;
         }
 
-        exerciseRepository.saveAll(List.of(
-                new Exercise(null, "Joggen", "Cardio", 30),
-                new Exercise(null, "Krafttraining", "Strength", 45),
-                new Exercise(null, "Yoga", "Mobility", 20)
-        ));
-    }
-
-    public record CompleteExerciseRequest(Long exerciseId, Integer duration) {
-    }
-
-    public record ShopItem(String id, String name, int cost, String description) {
-    }
-
-    public record ShopPurchaseRequest(String itemId) {
+        exerciseRepository.saveAll(fallbackExercises().stream()
+                .map(exercise -> new Exercise(null, exercise.getName(), exercise.getCategory(), exercise.getTargetMinutesPerDay()))
+                .toList());
     }
 }
