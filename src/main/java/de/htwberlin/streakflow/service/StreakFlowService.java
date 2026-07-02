@@ -1,14 +1,18 @@
 package de.htwberlin.streakflow.service;
 
 import de.htwberlin.streakflow.dto.CompleteExerciseRequest;
+import de.htwberlin.streakflow.dto.CreatePlayerRequest;
+import de.htwberlin.streakflow.dto.PlayerWorkoutRequest;
 import de.htwberlin.streakflow.dto.ShopItem;
 import de.htwberlin.streakflow.dto.ShopPurchaseRequest;
 import de.htwberlin.streakflow.model.Exercise;
 import de.htwberlin.streakflow.model.ExerciseExecution;
+import de.htwberlin.streakflow.model.Player;
 import de.htwberlin.streakflow.model.ShopPurchase;
 import de.htwberlin.streakflow.model.UserProgress;
 import de.htwberlin.streakflow.repository.ExerciseExecutionRepository;
 import de.htwberlin.streakflow.repository.ExerciseRepository;
+import de.htwberlin.streakflow.repository.PlayerRepository;
 import de.htwberlin.streakflow.repository.ShopPurchaseRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -32,15 +36,18 @@ public class StreakFlowService {
     private static final int XP_BOOST_COST = 30;
     private static final int STREAK_FREEZE_COST = 50;
     private static final int BASE_STREAK_FREEZERS = 0;
+    private static final int MAX_PLAYERS = 4;
 
     private final ExerciseRepository exerciseRepository;
     private final ExerciseExecutionRepository executionRepository;
     private final ShopPurchaseRepository shopPurchaseRepository;
+    private final PlayerRepository playerRepository;
 
-    public StreakFlowService(ExerciseRepository exerciseRepository, ExerciseExecutionRepository executionRepository, ShopPurchaseRepository shopPurchaseRepository) {
+    public StreakFlowService(ExerciseRepository exerciseRepository, ExerciseExecutionRepository executionRepository, ShopPurchaseRepository shopPurchaseRepository, PlayerRepository playerRepository) {
         this.exerciseRepository = exerciseRepository;
         this.executionRepository = executionRepository;
         this.shopPurchaseRepository = shopPurchaseRepository;
+        this.playerRepository = playerRepository;
     }
 
     public List<Exercise> getExercises() {
@@ -224,6 +231,42 @@ public class StreakFlowService {
 
     public UserProgress fallbackProgress() {
         return new UserProgress(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, null);
+    }
+
+    public List<Player> getPlayers() {
+        return playerRepository.findAll();
+    }
+
+    public Player createPlayer(CreatePlayerRequest request) {
+        if (request.name() == null || request.name().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Player name is required");
+        }
+
+        if (playerRepository.count() >= MAX_PLAYERS) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A team can have at most four players");
+        }
+
+        return playerRepository.save(new Player(null, request.name(), 0, 0, 0));
+    }
+
+    public Player completePlayerWorkout(Long id, PlayerWorkoutRequest request) {
+        Player player = playerRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found"));
+        int duration = request.duration() == null ? 30 : request.duration();
+        if (duration < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duration must be positive");
+        }
+
+        player.addWorkout(duration, duration * XP_PER_MINUTE, Math.max(1, duration / MINUTES_PER_COIN));
+        return playerRepository.save(player);
+    }
+
+    public void deletePlayer(Long id) {
+        if (!playerRepository.existsById(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found");
+        }
+
+        playerRepository.deleteById(id);
     }
 
     private int availableCoins() {
