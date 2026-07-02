@@ -120,6 +120,17 @@ class StreakflowApplicationTests {
     }
 
     @Test
+    void allowsCompletingSameExerciseAgainOnNextDay() throws Exception {
+        executionRepository.save(new ExerciseExecution(null, LocalDate.now().minusDays(1), 30, jogging.getId(), "Joggen", 300, 3));
+
+        mockMvc.perform(post("/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"exerciseId\":" + jogging.getId() + ",\"duration\":30}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.exerciseName").value("Joggen"));
+    }
+
+    @Test
     void buysXpBoostAndReducesCoins() throws Exception {
         earnCoins(40);
 
