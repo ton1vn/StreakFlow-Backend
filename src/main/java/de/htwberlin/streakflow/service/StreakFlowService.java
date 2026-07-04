@@ -37,6 +37,7 @@ public class StreakFlowService {
     private static final int STREAK_FREEZE_COST = 50;
     private static final int BASE_STREAK_FREEZERS = 0;
     private static final int MAX_PLAYERS = 4;
+    private static final int MAX_DURATION_MINUTES = 240;
 
     private final ExerciseRepository exerciseRepository;
     private final ExerciseExecutionRepository executionRepository;
@@ -56,6 +57,10 @@ public class StreakFlowService {
     }
 
     public Exercise createExercise(Exercise exercise) {
+        if (exercise == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Exercise payload is required");
+        }
+
         if (exercise.getName() == null || exercise.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name is required");
         }
@@ -68,12 +73,20 @@ public class StreakFlowService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duration must be positive");
         }
 
+        if (exercise.getTargetMinutesPerDay() > MAX_DURATION_MINUTES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duration must be at most 240 minutes");
+        }
+
+        exercise.setName(exercise.getName().trim());
+        exercise.setCategory(exercise.getCategory().trim());
         exercise.setId(null);
         return exerciseRepository.save(exercise);
     }
 
     @Transactional
     public void deleteExercise(Long id) {
+        requirePositiveId(id, "Exercise id");
+
         if (!exerciseRepository.existsById(id)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exercise not found");
         }
@@ -87,9 +100,15 @@ public class StreakFlowService {
     }
 
     public ExerciseExecution completeExercise(CompleteExerciseRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Execution payload is required");
+        }
+
         if (request.exerciseId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Exercise id is required");
         }
+
+        requirePositiveId(request.exerciseId(), "Exercise id");
 
         Exercise exercise = exerciseRepository.findById(request.exerciseId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exercise not found"));
@@ -102,6 +121,10 @@ public class StreakFlowService {
         int duration = request.duration() == null ? exercise.getTargetMinutesPerDay() : request.duration();
         if (duration < 1) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duration must be positive");
+        }
+
+        if (duration > MAX_DURATION_MINUTES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duration must be at most 240 minutes");
         }
 
         int earnedXp = duration * XP_PER_MINUTE;
@@ -132,12 +155,17 @@ public class StreakFlowService {
     }
 
     public ShopPurchase buyShopItem(ShopPurchaseRequest request) {
+        if (request == null || request.itemId() == null || request.itemId().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shop item id is required");
+        }
+
+        String requestedItemId = request.itemId().trim();
         ShopItem item = getShopItems().stream()
-                .filter(shopItem -> shopItem.id().equals(request.itemId()))
+                .filter(shopItem -> shopItem.id().equals(requestedItemId))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Shop item not found"));
 
-        if (availableCoins() < item.cost()) {
+        if (coinBalance() < item.cost()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Not enough coins");
         }
 
@@ -159,6 +187,8 @@ public class StreakFlowService {
     }
 
     public ShopPurchase useShopPurchase(Long id) {
+        requirePositiveId(id, "Purchase id");
+
         ShopPurchase purchase = shopPurchaseRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Purchase not found"));
 
@@ -238,6 +268,10 @@ public class StreakFlowService {
     }
 
     public Player createPlayer(CreatePlayerRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Player payload is required");
+        }
+
         if (request.name() == null || request.name().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Player name is required");
         }
@@ -246,15 +280,21 @@ public class StreakFlowService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A team can have at most four players");
         }
 
-        return playerRepository.save(new Player(null, request.name(), 0, 0, 0));
+        return playerRepository.save(new Player(null, request.name().trim(), 0, 0, 0));
     }
 
     public Player completePlayerWorkout(Long id, PlayerWorkoutRequest request) {
+        requirePositiveId(id, "Player id");
+
         Player player = playerRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found"));
-        int duration = request.duration() == null ? 30 : request.duration();
+        int duration = request == null || request.duration() == null ? 30 : request.duration();
         if (duration < 1) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duration must be positive");
+        }
+
+        if (duration > MAX_DURATION_MINUTES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duration must be at most 240 minutes");
         }
 
         player.addWorkout(duration, duration * XP_PER_MINUTE, Math.max(1, duration / MINUTES_PER_COIN));
@@ -262,6 +302,8 @@ public class StreakFlowService {
     }
 
     public void deletePlayer(Long id) {
+        requirePositiveId(id, "Player id");
+
         if (!playerRepository.existsById(id)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found");
         }
@@ -270,6 +312,10 @@ public class StreakFlowService {
     }
 
     private int availableCoins() {
+        return Math.max(0, coinBalance());
+    }
+
+    private int coinBalance() {
         int earnedCoins = executionRepository.findAll().stream()
                 .mapToInt(ExerciseExecution::getEarnedCoins)
                 .sum();
@@ -327,7 +373,7 @@ public class StreakFlowService {
             }
 
             if (availableFreezers <= 0) {
-                return 0;
+                return streak;
             }
 
             consumeStreakFreeze();
@@ -378,6 +424,12 @@ public class StreakFlowService {
             dates.add(execution.getDate());
         }
         return dates;
+    }
+
+    private void requirePositiveId(Long id, String label) {
+        if (id == null || id < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + " must be positive");
+        }
     }
 
     private void seedDefaultExercisesIfNeeded() {

@@ -4,7 +4,10 @@ import de.htwberlin.streakflow.dto.CreatePlayerRequest;
 import de.htwberlin.streakflow.dto.PlayerWorkoutRequest;
 import de.htwberlin.streakflow.model.Player;
 import de.htwberlin.streakflow.service.StreakFlowService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +21,7 @@ import java.util.List;
 
 @CrossOrigin(origins = "*")
 @RestController
+@Validated
 public class TeamController {
 
     private final StreakFlowService streakFlowService;
@@ -37,18 +41,18 @@ public class TeamController {
 
     @PostMapping("/players")
     @ResponseStatus(HttpStatus.CREATED)
-    public Player createPlayer(@RequestBody CreatePlayerRequest request) {
+    public Player createPlayer(@Valid @RequestBody CreatePlayerRequest request) {
         return streakFlowService.createPlayer(request);
     }
 
     @PostMapping("/players/{id}/workouts")
-    public Player completePlayerWorkout(@PathVariable Long id, @RequestBody PlayerWorkoutRequest request) {
+    public Player completePlayerWorkout(@Positive @PathVariable Long id, @Valid @RequestBody PlayerWorkoutRequest request) {
         return streakFlowService.completePlayerWorkout(id, request);
     }
 
     @DeleteMapping("/players/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deletePlayer(@PathVariable Long id) {
+    public void deletePlayer(@Positive @PathVariable Long id) {
         streakFlowService.deletePlayer(id);
     }
 }

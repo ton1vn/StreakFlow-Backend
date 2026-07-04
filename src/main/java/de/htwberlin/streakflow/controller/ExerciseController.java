@@ -8,7 +8,10 @@ import de.htwberlin.streakflow.model.ExerciseExecution;
 import de.htwberlin.streakflow.model.ShopPurchase;
 import de.htwberlin.streakflow.model.UserProgress;
 import de.htwberlin.streakflow.service.StreakFlowService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +25,7 @@ import java.util.List;
 
 @CrossOrigin(origins = "*")
 @RestController
+@Validated
 public class ExerciseController {
 
     private final StreakFlowService streakFlowService;
@@ -41,13 +45,13 @@ public class ExerciseController {
 
     @PostMapping("/exercises")
     @ResponseStatus(HttpStatus.CREATED)
-    public Exercise createExercise(@RequestBody Exercise exercise) {
+    public Exercise createExercise(@Valid @RequestBody Exercise exercise) {
         return streakFlowService.createExercise(exercise);
     }
 
     @DeleteMapping("/exercises/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteExercise(@PathVariable Long id) {
+    public void deleteExercise(@Positive @PathVariable Long id) {
         streakFlowService.deleteExercise(id);
     }
 
@@ -62,7 +66,7 @@ public class ExerciseController {
 
     @PostMapping("/executions")
     @ResponseStatus(HttpStatus.CREATED)
-    public ExerciseExecution completeExercise(@RequestBody CompleteExerciseRequest request) {
+    public ExerciseExecution completeExercise(@Valid @RequestBody CompleteExerciseRequest request) {
         return streakFlowService.completeExercise(request);
     }
 
@@ -86,7 +90,7 @@ public class ExerciseController {
 
     @PostMapping("/shop/purchases")
     @ResponseStatus(HttpStatus.CREATED)
-    public ShopPurchase buyShopItem(@RequestBody ShopPurchaseRequest request) {
+    public ShopPurchase buyShopItem(@Valid @RequestBody ShopPurchaseRequest request) {
         return streakFlowService.buyShopItem(request);
     }
 
@@ -97,7 +101,7 @@ public class ExerciseController {
     }
 
     @PostMapping("/shop/purchases/{id}/use")
-    public ShopPurchase useShopPurchase(@PathVariable Long id) {
+    public ShopPurchase useShopPurchase(@Positive @PathVariable Long id) {
         return streakFlowService.useShopPurchase(id);
     }
 

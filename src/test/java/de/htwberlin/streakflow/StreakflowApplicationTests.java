@@ -2,6 +2,7 @@ package de.htwberlin.streakflow;
 
 import de.htwberlin.streakflow.model.Exercise;
 import de.htwberlin.streakflow.model.ExerciseExecution;
+import de.htwberlin.streakflow.model.ShopPurchase;
 import de.htwberlin.streakflow.repository.ExerciseExecutionRepository;
 import de.htwberlin.streakflow.repository.ExerciseRepository;
 import de.htwberlin.streakflow.repository.PlayerRepository;
@@ -15,6 +16,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
@@ -120,6 +122,38 @@ class StreakflowApplicationTests {
     }
 
     @Test
+    void rejectsExerciseWithBlankName() throws Exception {
+        mockMvc.perform(post("/exercises")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"   \",\"category\":\"Cardio\",\"targetMinutesPerDay\":30}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectsExerciseWithTooLongDuration() throws Exception {
+        mockMvc.perform(post("/exercises")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Marathon\",\"category\":\"Cardio\",\"targetMinutesPerDay\":300}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectsWorkoutWithNegativeDuration() throws Exception {
+        mockMvc.perform(post("/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"exerciseId\":" + jogging.getId() + ",\"duration\":-10}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectsShopPurchaseWithoutItemId() throws Exception {
+        mockMvc.perform(post("/shop/purchases")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itemId\":\"\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void allowsCompletingSameExerciseAgainOnNextDay() throws Exception {
         executionRepository.save(new ExerciseExecution(null, LocalDate.now().minusDays(1), 30, jogging.getId(), "Joggen", 300, 3));
 
@@ -128,6 +162,20 @@ class StreakflowApplicationTests {
                         .content("{\"exerciseId\":" + jogging.getId() + ",\"duration\":30}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.exerciseName").value("Joggen"));
+    }
+
+    @Test
+    void currentStreakKeepsTodayEvenWhenOlderHistoryHasGap() throws Exception {
+        executionRepository.save(new ExerciseExecution(null, LocalDate.now().minusDays(2), 20, yoga.getId(), "Yoga", 200, 2));
+
+        mockMvc.perform(post("/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"exerciseId\":" + jogging.getId() + ",\"duration\":30}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/progress"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStreak").value(1));
     }
 
     @Test
@@ -194,6 +242,15 @@ class StreakflowApplicationTests {
     }
 
     @Test
+    void progressNeverShowsNegativeCoins() throws Exception {
+        shopPurchaseRepository.save(new ShopPurchase(null, "xp-boost", "XP Boost", 30, LocalDateTime.now(), null, null));
+
+        mockMvc.perform(get("/progress"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.coins").value(0));
+    }
+
+    @Test
     void addsPlayersButRejectsFifthPlayer() throws Exception {
         createPlayer("Toni");
         createPlayer("Linh");
@@ -209,6 +266,25 @@ class StreakflowApplicationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Extra\"}"))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void rejectsPlayerWithBlankName() throws Exception {
+        mockMvc.perform(post("/players")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectsPlayerWorkoutWithTooLongDuration() throws Exception {
+        String playerJson = createPlayer("Toni");
+        String playerId = playerJson.replaceAll(".*\"id\":(\\d+).*", "$1");
+
+        mockMvc.perform(post("/players/" + playerId + "/workouts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"duration\":300}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
