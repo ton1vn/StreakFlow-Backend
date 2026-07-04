@@ -251,6 +251,21 @@ class StreakflowApplicationTests {
     }
 
     @Test
+    void invalidOldPurchasesDoNotConsumeFutureCoins() throws Exception {
+        shopPurchaseRepository.save(new ShopPurchase(null, "xp-boost", "XP Boost", 30, LocalDateTime.now().minusDays(2), null, null));
+
+        mockMvc.perform(post("/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"exerciseId\":" + jogging.getId() + ",\"duration\":30}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.earnedCoins").value(3));
+
+        mockMvc.perform(get("/progress"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.coins").value(3));
+    }
+
+    @Test
     void addsPlayersButRejectsFifthPlayer() throws Exception {
         createPlayer("Toni");
         createPlayer("Linh");

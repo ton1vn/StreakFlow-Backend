@@ -21,6 +21,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -312,17 +314,47 @@ public class StreakFlowService {
     }
 
     private int availableCoins() {
-        return Math.max(0, coinBalance());
+        return coinBalance();
     }
 
     private int coinBalance() {
-        int earnedCoins = executionRepository.findAll().stream()
-                .mapToInt(ExerciseExecution::getEarnedCoins)
-                .sum();
-        int spentCoins = shopPurchaseRepository.findAll().stream()
-                .mapToInt(ShopPurchase::getCost)
-                .sum();
-        return earnedCoins - spentCoins;
+        List<CoinLedgerEntry> entries = new ArrayList<>();
+        executionRepository.findAll().forEach(execution ->
+                entries.add(new CoinLedgerEntry(
+                        execution.getDate().atStartOfDay(),
+                        execution.getId() == null ? 0 : execution.getId(),
+                        execution.getEarnedCoins()
+                ))
+        );
+        shopPurchaseRepository.findAll().forEach(purchase ->
+                entries.add(new CoinLedgerEntry(
+                        purchase.getPurchasedAt() == null ? LocalDateTime.MIN : purchase.getPurchasedAt(),
+                        purchase.getId() == null ? 0 : purchase.getId(),
+                        -purchase.getCost()
+                ))
+        );
+
+        entries.sort(Comparator
+                .comparing(CoinLedgerEntry::dateTime)
+                .thenComparing(CoinLedgerEntry::id));
+
+        int balance = 0;
+        for (CoinLedgerEntry entry : entries) {
+            if (entry.amount() >= 0) {
+                balance += entry.amount();
+                continue;
+            }
+
+            int cost = Math.abs(entry.amount());
+            if (balance >= cost) {
+                balance -= cost;
+            }
+        }
+
+        return balance;
+    }
+
+    private record CoinLedgerEntry(LocalDateTime dateTime, Long id, int amount) {
     }
 
     private int activeXpBoostCount() {
