@@ -21,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -40,6 +41,7 @@ public class StreakFlowService {
     private static final int BASE_STREAK_FREEZERS = 0;
     private static final int MAX_PLAYERS = 4;
     private static final int MAX_DURATION_MINUTES = 240;
+    private static final ZoneId APP_ZONE = ZoneId.of("Europe/Berlin");
 
     private final ExerciseRepository exerciseRepository;
     private final ExerciseExecutionRepository executionRepository;
@@ -115,7 +117,7 @@ public class StreakFlowService {
         Exercise exercise = exerciseRepository.findById(request.exerciseId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exercise not found"));
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = today();
         if (executionRepository.existsByExerciseIdAndDate(exercise.getId(), today)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Exercise already completed today");
         }
@@ -176,7 +178,7 @@ public class StreakFlowService {
                 item.id(),
                 item.name(),
                 item.cost(),
-                LocalDateTime.now(),
+                now(),
                 null,
                 null
         );
@@ -202,7 +204,7 @@ public class StreakFlowService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "XP Boost was already activated");
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = now();
         purchase.setUsedAt(now);
         purchase.setExpiresAt(now.plusHours(24));
         return shopPurchaseRepository.save(purchase);
@@ -212,7 +214,7 @@ public class StreakFlowService {
         seedDefaultExercisesIfNeeded();
 
         List<ExerciseExecution> executions = executionRepository.findAll();
-        LocalDate today = LocalDate.now();
+        LocalDate today = today();
         List<ExerciseExecution> todayExecutions = executions.stream()
                 .filter(execution -> today.equals(execution.getDate()))
                 .toList();
@@ -383,7 +385,7 @@ public class StreakFlowService {
         return XP_BOOST_ID.equals(purchase.getItemId())
                 && purchase.getUsedAt() != null
                 && purchase.getExpiresAt() != null
-                && purchase.getExpiresAt().isAfter(LocalDateTime.now());
+                && purchase.getExpiresAt().isAfter(now());
     }
 
     private int availableStreakFreezerCount() {
@@ -392,7 +394,7 @@ public class StreakFlowService {
 
     private int calculateCurrentStreak(List<ExerciseExecution> executions) {
         Set<LocalDate> completedDates = completedDates(executions);
-        LocalDate today = LocalDate.now();
+        LocalDate today = today();
         LocalDate cursor = completedDates.contains(today) ? today : today.minusDays(1);
         int streak = 0;
         int availableFreezers = availableStreakFreezerCount();
@@ -419,14 +421,14 @@ public class StreakFlowService {
     private LocalDate oldestCompletedDate(Set<LocalDate> completedDates) {
         return completedDates.stream()
                 .min(LocalDate::compareTo)
-                .orElse(LocalDate.now());
+                .orElse(today());
     }
 
     private void consumeStreakFreeze() {
         ShopPurchase freeze = shopPurchaseRepository
                 .findFirstByItemIdAndUsedAtIsNullOrderByPurchasedAtAsc(STREAK_FREEZE_ID)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "No streak freezer available"));
-        freeze.setUsedAt(LocalDateTime.now());
+        freeze.setUsedAt(now());
         shopPurchaseRepository.save(freeze);
     }
 
@@ -456,6 +458,14 @@ public class StreakFlowService {
             dates.add(execution.getDate());
         }
         return dates;
+    }
+
+    private LocalDate today() {
+        return LocalDate.now(APP_ZONE);
+    }
+
+    private LocalDateTime now() {
+        return LocalDateTime.now(APP_ZONE);
     }
 
     private void requirePositiveId(Long id, String label) {
