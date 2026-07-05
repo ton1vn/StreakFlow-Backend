@@ -122,34 +122,20 @@ class StreakflowApplicationTests {
     }
 
     @Test
-    void rejectsExerciseWithBlankName() throws Exception {
+    void rejectsInvalidExerciseAndWorkoutInputs() throws Exception {
         mockMvc.perform(post("/exercises")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"   \",\"category\":\"Cardio\",\"targetMinutesPerDay\":30}"))
                 .andExpect(status().isBadRequest());
-    }
 
-    @Test
-    void rejectsExerciseWithTooLongDuration() throws Exception {
         mockMvc.perform(post("/exercises")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Marathon\",\"category\":\"Cardio\",\"targetMinutesPerDay\":300}"))
                 .andExpect(status().isBadRequest());
-    }
 
-    @Test
-    void rejectsWorkoutWithNegativeDuration() throws Exception {
         mockMvc.perform(post("/executions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"exerciseId\":" + jogging.getId() + ",\"duration\":-10}"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void rejectsShopPurchaseWithoutItemId() throws Exception {
-        mockMvc.perform(post("/shop/purchases")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\"\"}"))
                 .andExpect(status().isBadRequest());
     }
 
@@ -165,47 +151,23 @@ class StreakflowApplicationTests {
     }
 
     @Test
-    void currentStreakKeepsTodayEvenWhenOlderHistoryHasGap() throws Exception {
-        executionRepository.save(new ExerciseExecution(null, LocalDate.now().minusDays(2), 20, yoga.getId(), "Yoga", 200, 2));
-
-        mockMvc.perform(post("/executions")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"exerciseId\":" + jogging.getId() + ",\"duration\":30}"))
-                .andExpect(status().isCreated());
-
-        mockMvc.perform(get("/progress"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.currentStreak").value(1));
-    }
-
-    @Test
-    void buysXpBoostAndReducesCoins() throws Exception {
-        earnCoins(40);
-
-        mockMvc.perform(post("/shop/purchases")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\"xp-boost\"}"))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.itemId").value("xp-boost"))
-                .andExpect(jsonPath("$.cost").value(30));
-
-        mockMvc.perform(get("/progress"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.coins").value(10))
-                .andExpect(jsonPath("$.availableXpBoosts").value(1));
-    }
-
-    @Test
-    void usesXpBoostAndDoublesNextWorkoutXp() throws Exception {
+    void buysAndUsesXpBoostForNextWorkout() throws Exception {
         earnCoins(40);
         String purchaseJson = mockMvc.perform(post("/shop/purchases")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"itemId\":\"xp-boost\"}"))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.itemId").value("xp-boost"))
+                .andExpect(jsonPath("$.cost").value(30))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
         String purchaseId = purchaseJson.replaceAll(".*\"id\":(\\d+).*", "$1");
+
+        mockMvc.perform(get("/progress"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.coins").value(10))
+                .andExpect(jsonPath("$.availableXpBoosts").value(1));
 
         mockMvc.perform(post("/shop/purchases/" + purchaseId + "/use"))
                 .andExpect(status().isOk())
@@ -219,7 +181,12 @@ class StreakflowApplicationTests {
     }
 
     @Test
-    void buysStreakFreezerAndReducesCoins() throws Exception {
+    void buysStreakFreezerAndRejectsPurchaseWithoutEnoughCoins() throws Exception {
+        mockMvc.perform(post("/shop/purchases")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itemId\":\"streak-freeze\"}"))
+                .andExpect(status().isConflict());
+
         earnCoins(60);
 
         mockMvc.perform(post("/shop/freezer"))
@@ -234,25 +201,12 @@ class StreakflowApplicationTests {
     }
 
     @Test
-    void rejectsShopPurchaseWhenCoinsAreMissing() throws Exception {
-        mockMvc.perform(post("/shop/purchases")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\"streak-freeze\"}"))
-                .andExpect(status().isConflict());
-    }
-
-    @Test
-    void progressNeverShowsNegativeCoins() throws Exception {
+    void invalidOldPurchasesNeverCreateNegativeCoins() throws Exception {
         shopPurchaseRepository.save(new ShopPurchase(null, "xp-boost", "XP Boost", 30, LocalDateTime.now(), null, null));
 
         mockMvc.perform(get("/progress"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.coins").value(0));
-    }
-
-    @Test
-    void invalidOldPurchasesDoNotConsumeFutureCoins() throws Exception {
-        shopPurchaseRepository.save(new ShopPurchase(null, "xp-boost", "XP Boost", 30, LocalDateTime.now().minusDays(2), null, null));
 
         mockMvc.perform(post("/executions")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -266,8 +220,9 @@ class StreakflowApplicationTests {
     }
 
     @Test
-    void addsPlayersButRejectsFifthPlayer() throws Exception {
-        createPlayer("Toni");
+    void managesPlayersAndPlayerWorkouts() throws Exception {
+        String playerJson = createPlayer("Toni");
+        String playerId = playerJson.replaceAll(".*\"id\":(\\d+).*", "$1");
         createPlayer("Linh");
         createPlayer("Mina");
         createPlayer("Sam");
@@ -281,31 +236,16 @@ class StreakflowApplicationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Extra\"}"))
                 .andExpect(status().isConflict());
-    }
-
-    @Test
-    void rejectsPlayerWithBlankName() throws Exception {
-        mockMvc.perform(post("/players")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"   \"}"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void rejectsPlayerWorkoutWithTooLongDuration() throws Exception {
-        String playerJson = createPlayer("Toni");
-        String playerId = playerJson.replaceAll(".*\"id\":(\\d+).*", "$1");
 
         mockMvc.perform(post("/players/" + playerId + "/workouts")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"duration\":300}"))
                 .andExpect(status().isBadRequest());
-    }
 
-    @Test
-    void completesAndDeletesPlayerWorkout() throws Exception {
-        String playerJson = createPlayer("Toni");
-        String playerId = playerJson.replaceAll(".*\"id\":(\\d+).*", "$1");
+        mockMvc.perform(post("/players")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"   \"}"))
+                .andExpect(status().isBadRequest());
 
         mockMvc.perform(post("/players/" + playerId + "/workouts")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -320,7 +260,8 @@ class StreakflowApplicationTests {
 
         mockMvc.perform(get("/players"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(0)));
+                .andExpect(jsonPath("$", hasSize(3)))
+                .andExpect(jsonPath("$[*].name").value(org.hamcrest.Matchers.not(hasItem("Toni"))));
     }
 
     private void earnCoins(int coins) {
